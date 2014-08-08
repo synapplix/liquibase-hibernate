@@ -53,7 +53,8 @@ public class TableSnapshotGenerator extends HibernateSnapshotGenerator {
             // TODO autoincrement
 
             String hibernateType = hibernateColumn.getSqlType(dialect, mapping);
-            DataType dataType = toDataType(hibernateType, hibernateColumn.getSqlTypeCode());
+            Integer sqlTypeCode = hibernateColumn.getSqlTypeCode() != null ? hibernateColumn.getSqlTypeCode() : hibernateColumn.getSqlTypeCode(mapping);
+            DataType dataType = toDataType(hibernateType, sqlTypeCode);
             if (dataType == null) {
                 throw new DatabaseException("Unable to find column data type for column " + hibernateColumn.getName());
             }
@@ -86,7 +87,12 @@ public class TableSnapshotGenerator extends HibernateSnapshotGenerator {
         if (!matcher.matches()) {
             return null;
         }
-        DataType dataType = new DataType(matcher.group(1));
+        DataType dataType;
+        if (sqlTypeCode == java.sql.Types.CLOB) {
+            dataType = new DataType("CLOB");
+        } else {
+            dataType = new DataType(matcher.group(1));
+        }
         if (matcher.group(3).isEmpty()) {
             if (!matcher.group(2).isEmpty())
                 dataType.setColumnSize(Integer.parseInt(matcher.group(2)));
