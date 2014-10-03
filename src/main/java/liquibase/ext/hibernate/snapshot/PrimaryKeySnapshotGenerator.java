@@ -46,7 +46,7 @@ public class PrimaryKeySnapshotGenerator extends HibernateSnapshotGenerator {
                  * of tables with long prefixes
                  */
                 String hbnTableName = hibernateTable.getName();
-                if (hbnPrimaryKeyName.length() == 15
+                if (hbnPrimaryKeyName != null && hbnPrimaryKeyName.length() == 15
                         && hbnPrimaryKeyName.equals(PK_ALIAS_15.toAliasString(hbnTableName))) {
                     LOG.warning("Hibernate primary key name is probably truncated. " + hbnPrimaryKeyName);
                     String newAlias = NEW_PK_ALIAS.toAliasString(hbnTableName);
