@@ -4,18 +4,24 @@ import liquibase.exception.DatabaseException;
 import liquibase.ext.hibernate.database.HibernateDatabase;
 import liquibase.snapshot.DatabaseSnapshot;
 import liquibase.snapshot.InvalidExampleException;
+import liquibase.statement.DatabaseFunction;
 import liquibase.structure.DatabaseObject;
 import liquibase.structure.core.Column;
 import liquibase.structure.core.DataType;
+import liquibase.structure.core.PrimaryKey;
 import liquibase.structure.core.Schema;
 import liquibase.structure.core.Table;
 import liquibase.util.StringUtils;
+
 import org.hibernate.cfg.Configuration;
 import org.hibernate.dialect.Dialect;
+import org.hibernate.dialect.PostgreSQL81Dialect;
 import org.hibernate.engine.spi.Mapping;
-import org.hibernate.mapping.PrimaryKey;
+import org.hibernate.id.IdentityGenerator;
+import org.hibernate.mapping.SimpleValue;
 
 import java.util.Iterator;
+import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -41,6 +47,8 @@ public class TableSnapshotGenerator extends HibernateSnapshotGenerator {
         }
 
         Table table = new Table().setName(hibernateTable.getName());
+        PrimaryKey primaryKey = null;
+        int pkColumnPosition = 0;
         LOG.info("Found table " + table.getName());
 
         table.setSchema(example.getSchema());
@@ -67,10 +75,34 @@ public class TableSnapshotGenerator extends HibernateSnapshotGenerator {
             column.setNullable(hibernateColumn.isNullable());
             column.setCertainDataType(false);
 
-            PrimaryKey hibernatePrimaryKey = hibernateTable.getPrimaryKey();
+            org.hibernate.mapping.PrimaryKey hibernatePrimaryKey = hibernateTable.getPrimaryKey();
             if (hibernatePrimaryKey != null) {
-                if (hibernatePrimaryKey.getColumns().size() == 1 && hibernatePrimaryKey.getColumn(0).getName().equals(hibernateColumn.getName())) {
-                    column.setAutoIncrementInformation(new Column.AutoIncrementInformation());
+                boolean isPrimaryKeyColumn = false;
+                for (org.hibernate.mapping.Column pkColumn : (List<org.hibernate.mapping.Column>) hibernatePrimaryKey.getColumns()) {
+                    if (pkColumn.getName().equals(hibernateColumn.getName())) {
+                        isPrimaryKeyColumn = true;
+                        break;
+                    }
+                }
+
+                if (isPrimaryKeyColumn) {
+                    if (primaryKey == null) {
+                        primaryKey = new PrimaryKey();
+                        primaryKey.setName(hibernatePrimaryKey.getName());
+                    }
+                    primaryKey.addColumnName(pkColumnPosition++, column.getName());
+
+                    String identifierGeneratorStrategy = hibernateColumn.getValue().isSimpleValue() ?
+                            ((SimpleValue) hibernateColumn.getValue()).getIdentifierGeneratorStrategy() : null;
+                    if (("native".equals(identifierGeneratorStrategy) || "identity".equals(identifierGeneratorStrategy))) {
+                        if (PostgreSQL81Dialect.class.isAssignableFrom(dialect.getClass())) {
+                            column.setAutoIncrementInformation(new Column.AutoIncrementInformation());
+                            String sequenceName = (table.getName() + "_" + column.getName() + "_seq").toLowerCase();
+                            column.setDefaultValue(new DatabaseFunction("nextval('" + sequenceName + "'::regclass)"));
+                        } else if (dialect.getNativeIdentifierGeneratorClass().equals(IdentityGenerator.class)) {
+                            column.setAutoIncrementInformation(new Column.AutoIncrementInformation());
+                        }
+                    }
                 }
             }
             column.setRelation(table);
