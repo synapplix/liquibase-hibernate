@@ -1,15 +1,18 @@
 package liquibase.ext.hibernate.snapshot;
 
+import java.util.Iterator;
+
+import org.hibernate.cfg.Configuration;
+import org.hibernate.dialect.Dialect;
+
 import liquibase.exception.DatabaseException;
 import liquibase.ext.hibernate.database.HibernateDatabase;
 import liquibase.snapshot.DatabaseSnapshot;
 import liquibase.snapshot.InvalidExampleException;
 import liquibase.structure.DatabaseObject;
 import liquibase.structure.core.ForeignKey;
+import liquibase.structure.core.ForeignKeyConstraintType;
 import liquibase.structure.core.Table;
-import org.hibernate.cfg.Configuration;
-
-import java.util.Iterator;
 
 public class ForeignKeySnapshotGenerator extends HibernateSnapshotGenerator {
 
@@ -30,11 +33,12 @@ public class ForeignKeySnapshotGenerator extends HibernateSnapshotGenerator {
         if (foundObject instanceof Table) {
             Table table = (Table) foundObject;
             HibernateDatabase database = (HibernateDatabase) snapshot.getDatabase();
+            Dialect dialect = database.getDialect();
             Configuration cfg = database.getConfiguration();
             Iterator<org.hibernate.mapping.Table> tableMappings = cfg.getTableMappings();
             while (tableMappings.hasNext()) {
                 org.hibernate.mapping.Table hibernateTable = (org.hibernate.mapping.Table) tableMappings.next();
-                Iterator fkIterator = hibernateTable.getForeignKeyIterator();
+                Iterator<?> fkIterator = hibernateTable.getForeignKeyIterator();
                 while (fkIterator.hasNext()) {
                     org.hibernate.mapping.ForeignKey hibernateForeignKey = (org.hibernate.mapping.ForeignKey) fkIterator.next();
                     Table currentTable = new Table().setName(hibernateTable.getName());
@@ -58,7 +62,10 @@ public class ForeignKeySnapshotGenerator extends HibernateSnapshotGenerator {
                                 fk.addPrimaryKeyColumn(((org.hibernate.mapping.Column) column).getName());
                             }
                         }
-
+                        if (dialect.supportsCascadeDelete() && hibernateForeignKey.isCascadeDeleteEnabled()) {
+                          ForeignKeyConstraintType deleteRule = ForeignKeyConstraintType.importedKeyCascade;
+                          fk.setDeleteRule(deleteRule);
+                        }
                         fk.setDeferrable(false);
                         fk.setInitiallyDeferred(false);
 
